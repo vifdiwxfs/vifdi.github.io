@@ -27,6 +27,20 @@
 
 ### 本地预览
 
+#### 使用 Jekyll（推荐）
+
+```bash
+# 安装依赖
+bundle install
+
+# 启动本地服务器
+bundle exec jekyll serve
+
+# 然后在浏览器中访问 http://localhost:4000
+```
+
+#### 或使用简单的 HTTP 服务器
+
 1. 直接在浏览器中打开 `index.html` 文件
 2. 或使用简单的 HTTP 服务器：
 
@@ -47,12 +61,14 @@ php -S localhost:8000
 
 这个网站可以轻松部署到各种静态托管平台：
 
-#### GitHub Pages
+#### GitHub Pages（自动部署）
 
-1. 将代码推送到 GitHub 仓库
-2. 在仓库设置中启用 GitHub Pages
-3. 选择分支（通常是 main 或 gh-pages）
-4. 网站将在 `https://username.github.io/repository-name` 上线
+仓库已配置 GitHub Actions 工作流，支持自动构建并发布到 GitHub Pages：
+
+1. 将代码推送到仓库的 `main` 分支（或创建 Pull Request 并合并）
+2. 第一次使用时，在仓库 **Settings → Pages** 中将发布来源设置为 **GitHub Actions**
+3. 工作流会自动执行 Jekyll 构建并将站点发布到 GitHub Pages
+4. 构建完成后，可在工作流日志或 **Settings → Pages** 中查看访问链接
 
 #### Vercel
 
