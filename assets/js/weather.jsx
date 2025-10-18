@@ -1,8 +1,11 @@
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 const GEO_API_URL = "https://geocoding-api.open-meteo.com/v1/search";
+const GEO_REVERSE_API_URL = "https://geocoding-api.open-meteo.com/v1/reverse";
 const WEATHER_API_URL = "https://api.open-meteo.com/v1/forecast";
 const DEFAULT_CITY = "上海";
+const DEFAULT_COORDINATES = [31.2304, 121.4737];
+const DEFAULT_MAP_ZOOM = 5;
 
 const WEATHER_CONDITIONS = [
   {
@@ -68,6 +71,29 @@ const DEFAULT_CONDITION = {
   description: "天气变化莫测，请随时关注",
   icon: "🌈",
   theme: "clear-sky",
+};
+
+const escapeHtml = (value) => {
+  if (value === undefined || value === null) {
+    return "";
+  }
+
+  return String(value).replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      case "'":
+        return "&#39;";
+      default:
+        return char;
+    }
+  });
 };
 
 const getConditionFromCode = (code) => {
@@ -264,6 +290,11 @@ function App() {
   const [current, setCurrent] = useState(null);
   const [daily, setDaily] = useState(null);
 
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const locationMarkerRef = useRef(null);
+  const selectionPopupRef = useRef(null);
+
   const theme = useMemo(() => {
     if (!current) return DEFAULT_CONDITION.theme;
     const condition = getConditionFromCode(current.weather_code);
@@ -293,80 +324,6 @@ function App() {
     });
   }, [daily]);
 
-  useEffect(() => {
-    fetchWeather(DEFAULT_CITY);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const fetchWeather = async (cityName) => {
-    if (!cityName) {
-      setError("请输入想要查询的城市或地区名称");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const geoResponse = await fetch(
-        `${GEO_API_URL}?name=${encodeURIComponent(cityName)}&count=1&language=zh&format=json`
-      );
-
-      if (!geoResponse.ok) {
-        throw new Error("定位服务暂时不可用，请稍后再试");
-      }
-
-      const geoData = await geoResponse.json();
-
-      if (!geoData.results || geoData.results.length === 0) {
-        throw new Error("没有找到匹配的城市，请尝试其他名称或语言");
-      }
-
-      const place = geoData.results[0];
-
-      const params = new URLSearchParams({
-        latitude: place.latitude,
-        longitude: place.longitude,
-        current:
-          "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day",
-        daily: "weather_code,temperature_2m_max,temperature_2m_min",
-        timezone: place.timezone || "auto",
-        forecast_days: 5,
-        temperature_unit: "celsius",
-        wind_speed_unit: "kmh",
-      });
-
-      const weatherResponse = await fetch(`${WEATHER_API_URL}?${params.toString()}`);
-
-      if (!weatherResponse.ok) {
-        throw new Error("天气服务暂时不可用，请稍后再试");
-      }
-
-      const weatherData = await weatherResponse.json();
-
-      if (!weatherData.current) {
-        throw new Error("未能获取到该地区的天气数据");
-      }
-
-      setLocation(place);
-      setCurrent(weatherData.current);
-      setDaily(weatherData.daily || null);
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "获取天气信息失败，请稍后再试");
-      setLocation(null);
-      setCurrent(null);
-      setDaily(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    fetchWeather(query.trim());
-  };
-
   const locationName = useMemo(() => {
     if (!location) return "";
     const parts = [location.name];
@@ -378,6 +335,242 @@ function App() {
     }
     return parts.join(" · ");
   }, [location]);
+
+  const fetchWeather = useCallback(
+    async (cityNameInput, options = {}) => {
+      const { place } = options;
+      const trimmedCityName = (cityNameInput || "").trim();
+
+      if (!trimmedCityName && !place) {
+        setError("请输入想要查询的城市或地区名称");
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        let resolvedPlace = place;
+
+        if (!resolvedPlace) {
+          const geoResponse = await fetch(
+            `${GEO_API_URL}?name=${encodeURIComponent(trimmedCityName)}&count=1&language=zh&format=json`
+          );
+
+          if (!geoResponse.ok) {
+            throw new Error("定位服务暂时不可用，请稍后再试");
+          }
+
+          const geoData = await geoResponse.json();
+
+          if (!geoData.results || geoData.results.length === 0) {
+            throw new Error("没有找到匹配的城市，请尝试其他名称或语言");
+          }
+
+          resolvedPlace = geoData.results[0];
+        }
+
+        const params = new URLSearchParams({
+          latitude: resolvedPlace.latitude,
+          longitude: resolvedPlace.longitude,
+          current:
+            "temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day",
+          daily: "weather_code,temperature_2m_max,temperature_2m_min",
+          timezone: resolvedPlace.timezone || "auto",
+          forecast_days: 5,
+          temperature_unit: "celsius",
+          wind_speed_unit: "kmh",
+        });
+
+        const weatherResponse = await fetch(`${WEATHER_API_URL}?${params.toString()}`);
+
+        if (!weatherResponse.ok) {
+          throw new Error("天气服务暂时不可用，请稍后再试");
+        }
+
+        const weatherData = await weatherResponse.json();
+
+        if (!weatherData.current) {
+          throw new Error("未能获取到该地区的天气数据");
+        }
+
+        setLocation(resolvedPlace);
+        setCurrent(weatherData.current);
+        setDaily(weatherData.daily || null);
+        setQuery(resolvedPlace.name || trimmedCityName);
+      } catch (err) {
+        console.error(err);
+        setError(err.message || "获取天气信息失败，请稍后再试");
+        setLocation(null);
+        setCurrent(null);
+        setDaily(null);
+      } finally {
+        setLoading(false);
+        if (selectionPopupRef.current) {
+          selectionPopupRef.current.remove();
+          selectionPopupRef.current = null;
+        }
+      }
+    },
+    [setQuery]
+  );
+
+  const handleMapClick = useCallback(
+    async (event) => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+
+      const { lat, lng } = event.latlng;
+
+      if (selectionPopupRef.current) {
+        selectionPopupRef.current.remove();
+        selectionPopupRef.current = null;
+      }
+
+      const popup = L.popup()
+        .setLatLng([lat, lng])
+        .setContent("正在定位该区域的城市...")
+        .openOn(map);
+
+      selectionPopupRef.current = popup;
+
+      try {
+        const reverseResponse = await fetch(
+          `${GEO_REVERSE_API_URL}?latitude=${lat}&longitude=${lng}&count=1&language=zh&format=json`
+        );
+
+        if (!reverseResponse.ok) {
+          throw new Error("定位服务暂时不可用，请稍后再试");
+        }
+
+        const reverseData = await reverseResponse.json();
+
+        if (!reverseData.results || reverseData.results.length === 0) {
+          popup.setContent("未找到附近的城市，请尝试其他位置。");
+          return;
+        }
+
+        const place = reverseData.results[0];
+        const displayNameParts = [place.name];
+        if (place.admin1 && place.admin1 !== place.name) {
+          displayNameParts.push(place.admin1);
+        }
+        if (place.country) {
+          displayNameParts.push(place.country);
+        }
+
+        const displayName = displayNameParts.join(" · ") || place.name || "未知地点";
+        const latLngText = `纬度 ${Number(lat).toFixed(2)} · 经度 ${Number(lng).toFixed(2)}`;
+        const buttonId = `map-select-${Date.now()}`;
+
+        popup.setContent(
+          `<div class="city-marker-popup">
+            <div class="popup-title">${escapeHtml(displayName)}</div>
+            <div>${escapeHtml(latLngText)}</div>
+            <div class="popup-action">
+              <button id="${buttonId}" class="popup-button">查询该城市天气</button>
+            </div>
+          </div>`
+        );
+
+        setTimeout(() => {
+          const button = document.getElementById(buttonId);
+          if (button) {
+            button.addEventListener(
+              "click",
+              () => {
+                fetchWeather(place.name, { place });
+                popup.remove();
+                if (selectionPopupRef.current === popup) {
+                  selectionPopupRef.current = null;
+                }
+              },
+              { once: true }
+            );
+          }
+        }, 0);
+      } catch (err) {
+        console.error(err);
+        popup.setContent("定位该区域时出现问题，请稍后重试。");
+      }
+    },
+    [fetchWeather]
+  );
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+    if (typeof L === "undefined") {
+      console.error("Leaflet library 未正确加载");
+      return;
+    }
+
+    const map = L.map(mapContainerRef.current).setView(
+      DEFAULT_COORDINATES,
+      DEFAULT_MAP_ZOOM
+    );
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+
+    map.on("click", handleMapClick);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      map.off("click", handleMapClick);
+      map.remove();
+      mapInstanceRef.current = null;
+      locationMarkerRef.current = null;
+      if (selectionPopupRef.current) {
+        selectionPopupRef.current.remove();
+        selectionPopupRef.current = null;
+      }
+    };
+  }, [handleMapClick]);
+
+  useEffect(() => {
+    fetchWeather(DEFAULT_CITY);
+  }, [fetchWeather]);
+
+  useEffect(() => {
+    if (!mapInstanceRef.current || !location) return;
+
+    const latitude = Number(location.latitude);
+    const longitude = Number(location.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return;
+    }
+
+    const map = mapInstanceRef.current;
+    const latLng = [latitude, longitude];
+    const currentZoom = map.getZoom();
+    const nextZoom = Math.max(currentZoom || DEFAULT_MAP_ZOOM, 6);
+
+    map.setView(latLng, nextZoom, { animate: true });
+
+    if (!locationMarkerRef.current) {
+      locationMarkerRef.current = L.marker(latLng).addTo(map);
+    } else {
+      locationMarkerRef.current.setLatLng(latLng);
+    }
+
+    const displayName = locationName || location.name || "未知地点";
+    const latLngInfo = `纬度 ${latitude.toFixed(2)} · 经度 ${longitude.toFixed(2)}`;
+    const popupContent = `<div class="city-marker-popup">
+      <div class="popup-title">${escapeHtml(displayName)}</div>
+      <div>${escapeHtml(latLngInfo)}</div>
+    </div>`;
+
+    locationMarkerRef.current.bindPopup(popupContent).openPopup();
+  }, [location, locationName]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    fetchWeather(query);
+  };
 
   return (
     <div className="weather-app">
@@ -410,6 +603,13 @@ function App() {
       </section>
 
       <main className="weather-content">
+        <section className="map-container">
+          <div className="map-title">🗺️ 交互式城市地图</div>
+          <div className="map-wrapper">
+            <div ref={mapContainerRef} />
+          </div>
+        </section>
+
         {loading && <LoadingState />}
         {!loading && error && <ErrorState message={error} />}
 
