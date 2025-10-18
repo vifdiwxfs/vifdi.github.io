@@ -318,6 +318,74 @@ body {
     z-index: 1;
 }
 
+.map-container {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 30px;
+    padding: 40px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(10px);
+    margin-bottom: 30px;
+}
+
+.map-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.map-wrapper {
+    width: 100%;
+    height: 500px;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.map-wrapper > div {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+}
+
+.map-wrapper .leaflet-container {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+}
+
+.city-marker-popup {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.city-marker-popup .popup-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 8px;
+}
+
+.city-marker-popup .popup-action {
+    margin-top: 12px;
+}
+
+.city-marker-popup .popup-button {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.city-marker-popup .popup-button:hover {
+    transform: scale(1.05);
+}
+
 .loading {
     text-align: center;
     padding: 60px 20px;
@@ -571,6 +639,14 @@ footer a:hover {
         width: 100%;
     }
 
+    .map-container {
+        padding: 30px 20px;
+    }
+
+    .map-wrapper {
+        height: 360px;
+    }
+
     .main-weather {
         padding: 30px 20px;
     }
@@ -603,6 +679,10 @@ footer a:hover {
 }
 
 @media (max-width: 480px) {
+    .map-wrapper {
+        height: 260px;
+    }
+
     .weather-details {
         grid-template-columns: repeat(2, 1fr);
     }
